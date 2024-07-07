@@ -1,0 +1,67 @@
+pragma solidity ^0.8.0;
+
+contract CorruptionReporting {
+    struct Report {
+        address reporter;
+        string description;
+        bool verified;
+        bool rewarded;
+    }
+
+    address public admin;
+    uint public reportCount;
+    mapping(uint => Report) public reports;
+
+    event ReportCreated(uint indexed reportId, address indexed reporter);
+    event ReportValidated(uint indexed reportId);
+    event RewardGiven(uint indexed reportId);
+
+    modifier onlyAdmin() {
+        require(msg.sender == admin, "Caller is not the admin");
+        _;
+    }
+
+    constructor() {
+        admin = msg.sender;
+    }
+
+    function createReport(string memory _description) public {
+        require(bytes(_description).length > 0, "Description is required");
+
+        reports[++reportCount] = Report(msg.sender, _description, false, false);
+        emit ReportCreated(reportCount, msg.sender);
+    }
+
+    function validateReport(uint _reportId) public onlyAdmin {
+        require(_reportId > 0 && _reportId <= reportCount, "Invalid report ID");
+
+        Report storage report = reports[_reportId];
+        require(!report.verified, "Report already verified");
+
+        report.verified = true;
+        emit ReportValidated(_reportId);
+    }
+
+    function giveReward(uint _reportId) public onlyAdmin {
+        require(_reportId > 0 && _reportId <= reportCount, "Invalid report ID");
+
+        Report storage report = reports[_reportId];
+        require(report.verified && !report.rewarded, "Invalid reward state");
+
+        report.rewarded = true;
+        (bool success, ) = report.reporter.call{value: 1 ether}("");
+        require(success, "Reward transfer failed");
+
+        emit RewardGiven(_reportId);
+    }
+
+    function checkTotalReports() public view {
+        assert(reportCount >= 0);
+    }
+
+    function triggerRevert(string memory _reason) public pure {
+        revert(_reason);
+    }
+
+    receive() external payable {}
+}
